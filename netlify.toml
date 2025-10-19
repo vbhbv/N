@@ -1,0 +1,10 @@
+[build]
+  # تأكيد أن مجلد الوظائف هو 'api'
+  functions = "api"
+
+[[redirects]]
+  # إعادة توجيه أي طلب يبدأ بـ /api/ إلى مسار الوظائف الحقيقي
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+  
