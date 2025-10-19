@@ -14,33 +14,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 1. عرض مؤشر التحميل
+            // 1. الإجراء الفوري: إظهار التحميل وإلغاء تفعيل الزر
             loadingIndicator.classList.remove('hidden');
             initialResultDiv.classList.add('hidden');
             analyzeButton.disabled = true;
 
-            // 2. إرسال النص إلى API الذكاء الاصطناعي (هنا يتم الاتصال بالخدمة السحابية)
+            // 2. إرسال النص إلى API الذكاء الاصطناعي
             try {
-                // *** هذا هو المكان الذي تتصل فيه بخدمة AI API الخاصة بك ***
-                // مثال: استدعاء دالة تقوم بـ fetch لـ Hugging Face أو OpenAI
+                // الاتصال بوظيفة Serverless في مسار /api/analyze
                 const response = await callAIFallacyDetector(text);
                 
-                // 3. عرض النتيجة الأولية
+                // 3. عرض النتيجة في حالة النجاح
                 if (response.success) {
-                    const score = response.rationality_index; // مثال: 75
-                    const fallacies = response.detected_fallacies.join(', '); // مثال: مغالطة رجل القش
+                    const score = response.rationality_index;
+                    const comment = response.initial_comment || 'تم تحليل نمط تفكيرك بنجاح.';
                     
-                    initialScore.innerHTML = `مقياسك الأولي: <strong>${score}%</strong>.<br> تم اكتشاف مغالطات شائعة مثل: ${fallacies}.`;
+                    initialScore.innerHTML = `مقياسك الأولي: <strong>${score}%</strong>.<br> ${comment}`;
                     
                     initialResultDiv.classList.remove('hidden');
                 } else {
-                    alert('عذراً، حدث خطأ في تحليل الذكاء الاصطناعي. الرجاء المحاولة لاحقاً.');
+                    // رسالة خطأ إذا فشلت الوظيفة رغم نجاح الاتصال
+                    alert('عذراً، حدث خطأ داخلي في تحليل الذكاء الاصطناعي. قد تكون المشكلة في تنسيق JSON العائد.');
                 }
             } catch (error) {
+                // رسالة خطأ إذا فشل الاتصال بالخادم
                 console.error('Error calling AI API:', error);
-                alert('فشل الاتصال بخدمة التحليل.');
+                alert('فشل الاتصال بخدمة التحليل. يرجى مراجعة سجلات النشر على Netlify للتحقق من خطأ الـ API Key أو الإعدادات.');
             } finally {
-                // 4. إخفاء التحميل وتمكين الزر
+                // 4. الإجراء الحتمي: إخفاء التحميل وإعادة تفعيل الزر
                 loadingIndicator.classList.add('hidden');
                 analyzeButton.disabled = false;
             }
@@ -48,25 +49,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// دالة وهمية لمحاكاة استدعاء الـ AI API
-// يجب استبدالها برمز حقيقي يتصل بخادمك أو خدمة سحابية
+// دالة الاتصال بالـ Serverless Function
 async function callAIFallacyDetector(text) {
-    // محاكاة تأخير الشبكة (3 ثوانٍ)
-    await new Promise(resolve => setTimeout(resolve, 3000)); 
-    
-    // محاكاة الاستجابة من الذكاء الاصطناعي
-    // في الواقع، يتم إرسال النص إلى الخادم الذي يشغل نموذج NLP
-    const sampleResponse = {
-        success: true,
-        rationality_index: Math.floor(Math.random() * (90 - 50 + 1)) + 50, // نقاط عشوائية
-        detected_fallacies: ["مغالطة التعميم المتسرع", "الهجوم الشخصي"],
-        full_analysis_id: "report-12345" // معرف التقرير الكامل
-    };
-    return sampleResponse;
+    const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        // يجب إرسال النص ضمن كائن JSON
+        body: JSON.stringify({ analysis_text: text })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+        // إذا كان هناك خطأ في الخادم (500) أو لم يعد success: true
+        throw new Error(data.error || 'فشل الاتصال بخدمة التحليل.');
+    }
+
+    // تخزين التحليل الكامل في التخزين المحلي قبل إرجاع النتيجة
+    localStorage.setItem('full_analysis_report', data.full_analysis);
+
+    return data;
 }
 
-// دالة لتتبع التحويل (يمكنك استخدام Google Analytics أو أي أداة تتبع)
+// دالة لتتبع التحويل (يمكنك استخدامها في analysis.html)
 function trackConversion() {
     console.log('User clicked Telegram join button. Conversion tracking fired.');
-    // هنا تضع كود تتبع التحويل الفعلي (مثال: gtag('event', 'telegram_join');)
 }
