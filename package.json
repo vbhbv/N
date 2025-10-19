@@ -1,0 +1,20 @@
+{
+  "name": "rationality-index-ai",
+  "version": "1.0.0",
+  "description": "AI-powered philosophical analysis tool.",
+  "main": "index.js",
+  "dependencies": {
+    "@google/genai": "^0.15.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "philosophy",
+    "netlify-functions"
+  ],
+  "author": "",
+  "license": "ISC"
+}
