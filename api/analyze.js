@@ -1,58 +1,93 @@
-// ملف: api/analyze.js (يتم نشره على Vercel/Netlify)
+// ملف: api/analyze.js (تم التعديل لاستخدام CommonJS وتصحيح الإخراج)
 
-import { GoogleGenAI } from '@google/genai';
+// 1. استخدام require بدلاً من import
+const { GoogleGenAI } = require('@google/genai');
 
-// المفتاح السري يُقرأ بأمان من متغيرات البيئة
-// **لا تضع المفتاح السري هنا**
+// 2. قراءة المفتاح من متغيرات البيئة (التي تم تخزينها بأمان في Netlify)
 const ai = new GoogleGenAI({ 
-    apiKey: process.env.GEMINI_API_KEY, // هذا المتغير سيُخزن فيه مفتاحك الجديد
+    apiKey: process.env.GEMINI_API_KEY, 
 });
 
-// هذا هو المنطق الذي يشغل الـ AI
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+// 3. تعريف دالة المعالج (الـ Handler) - يجب استخدام exports.handler
+exports.handler = async function(event, context) {
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            body: JSON.stringify({ error: 'Method Not Allowed' })
+        };
+    }
 
-  const { analysis_text } = req.body;
+    // يتم تمرير الجسم كـ event.body (سلسلة نصية) في Netlify
+    let data;
+    try {
+        data = JSON.parse(event.body);
+    } catch (e) {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'Invalid JSON format' })
+        };
+    }
 
-  if (!analysis_text || analysis_text.length < 50) {
-    return res.status(400).json({ error: 'الرجاء إرسال نص كافٍ للتحليل.' });
-  }
+    const { analysis_text } = data;
 
-  // التعليمات الموجهة لنموذج Gemini (System Instruction)
-  const prompt = `أنت خبير في الفلسفة والمنطق. مهمتك هي تحليل النص العربي المُقدم وتحديد المغالطات المنطقية الرئيسية (مثل رجل القش، الهجوم الشخصي، التعميم المتسرع، التوسل بالسلطة) وتقييم جودة الاستدلال. قم بتوليد إجابة في صيغة JSON فقط تحتوي على: 
-  1. rationality_index: (عدد صحيح من 0 إلى 100 يمثل مقياس العقلانية). 
-  2. detected_fallacies: (مصفوفة من أسماء المغالطات المكتشفة).
-  3. initial_comment: (تعليق أولي مقتضب للمستخدم لا يكشف كل شيء، ولا يتجاوز 20 كلمة).
-  4. full_analysis: (تحليل مفصل وموسع، هذا المحتوى سيكون سريًا وخاصًا بأعضاء التيليجرام).
-  
-  النص لتحليله: "${analysis_text}"`;
-  
-  try {
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash", // نموذج سريع وفعال من Google
-        contents: prompt,
-        config: {
-            temperature: 0.1, // لضمان دقة منطقية عالية
-            responseMimeType: "application/json", // طلب إخراج JSON مباشر
-        },
-    });
+    if (!analysis_text || analysis_text.length < 50) {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'الرجاء إرسال نص كافٍ للتحليل.' })
+        };
+    }
 
-    const aiResponseText = response.text.trim();
-    const aiResponseJson = JSON.parse(aiResponseText);
+    const prompt = `أنت خبير في الفلسفة والمنطق. مهمتك هي تحليل النص العربي المُقدم وتحديد المغالطات المنطقية الرئيسية (مثل رجل القش، الهجوم الشخصي، التعميم المتسرع، التوسل بالسلطة) وتقييم جودة الاستدلال. قم بتوليد إجابة في صيغة JSON فقط تحتوي على: 
+    1. rationality_index: (عدد صحيح من 0 إلى 100). 
+    2. detected_fallacies: (مصفوفة من أسماء المغالطات).
+    3. initial_comment: (تعليق أولي مقتضب).
+    4. full_analysis: (تحليل مفصل وموسع).
+    
+    النص لتحليله: "${analysis_text}"`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                temperature: 0.1,
+                responseMimeType: "application/json",
+            },
+        });
 
-    // إرجاع النتيجة للواجهة الأمامية
-    res.status(200).json({
-      success: true,
-      rationality_index: aiResponseJson.rationality_index,
-      detected_fallacies: aiResponseJson.detected_fallacies,
-      initial_comment: aiResponseJson.initial_comment,
-      full_analysis: aiResponseJson.full_analysis 
-    });
+        const aiResponseText = response.text.trim();
+        
+        // ********************************************
+        // * تصحيح استخراج JSON (لضمان الموثوقية) *
+        // ********************************************
+        const jsonStart = aiResponseText.indexOf('{');
+        const jsonEnd = aiResponseText.lastIndexOf('}') + 1;
+        
+        if (jsonStart === -1 || jsonEnd === 0) {
+            throw new Error('فشل الذكاء الاصطناعي في توليد صيغة JSON صالحة.');
+        }
+        
+        const cleanJsonString = aiResponseText.substring(jsonStart, jsonEnd);
+        const aiResponseJson = JSON.parse(cleanJsonString);
 
-  } catch (error) {
-    console.error('Gemini API Error:', error);
-    res.status(500).json({ success: false, error: 'فشل في الاتصال بخدمة الذكاء الاصطناعي.' });
-  }
-}
+        // إرجاع النتيجة بنجاح (صيغة Netlify Function)
+        return {
+            statusCode: 200,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                success: true,
+                rationality_index: aiResponseJson.rationality_index,
+                detected_fallacies: aiResponseJson.detected_fallacies,
+                initial_comment: aiResponseJson.initial_comment,
+                full_analysis: aiResponseJson.full_analysis 
+            }),
+        };
+
+    } catch (error) {
+        console.error('Gemini API Error:', error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ success: false, error: 'فشل في الاتصال بخدمة الذكاء الاصطناعي.' })
+        };
+    }
+};
